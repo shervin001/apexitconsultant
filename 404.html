@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 — Page Not Found | Apex IT Consultant</title>
+  <meta name="description" content="The page you're looking for doesn't exist. Return to Apex IT Consultant." />
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#050810" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%233b82f6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M32 6 58 54H44.8L32 29.4 19.2 54H6Z' fill='url(%23g)'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <!-- Root-absolute: 404 pages are served at whatever missing URL was
+       requested, so a relative path would resolve against that path. -->
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <canvas id="webgl" aria-hidden="true"></canvas>
+
+  <main class="page-404" style="position: relative; z-index: 1;">
+    <div class="glass-card">
+      <p class="code-404">404</p>
+      <h1>This page drifted out of orbit</h1>
+      <p>The page you're looking for doesn't exist or has been moved.</p>
+      <a href="/" class="btn btn-primary">Back to Home</a>
+    </div>
+  </main>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script type="module">
+    // Small standalone 3D accent for the 404 page: a slowly tumbling
+    // wireframe icosahedron. Same performance/fallback rules as the
+    // main scene, scaled down.
+    import * as THREE from 'three';
+
+    const canvas = document.getElementById('webgl');
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function webglAvailable() {
+      try {
+        const test = document.createElement('canvas');
+        return !!(window.WebGLRenderingContext &&
+          (test.getContext('webgl2') || test.getContext('webgl')));
+      } catch (e) {
+        return false;
+      }
+    }
+
+    if (!canvas || !webglAvailable()) {
+      if (canvas) canvas.remove();
+    } else {
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 60);
+      camera.position.z = 10;
+
+      const group = new THREE.Group();
+      const geo = new THREE.IcosahedronGeometry(3, 0);
+      group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: 0x22d3ee, wireframe: true, transparent: true, opacity: 0.4,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      })));
+      const core = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({
+        color: 0x3b82f6, transparent: true, opacity: 0.06,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      core.scale.setScalar(0.96);
+      group.add(core);
+      group.position.set(4.5, 1.5, -2);
+      scene.add(group);
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        if (prefersReducedMotion) renderer.render(scene, camera);
+      });
+
+      if (prefersReducedMotion) {
+        group.rotation.set(0.5, 0.8, 0);
+        renderer.render(scene, camera);
+      } else {
+        let rafId = null;
+        const animate = () => {
+          rafId = requestAnimationFrame(animate);
+          group.rotation.x += 0.003;
+          group.rotation.y += 0.004;
+          renderer.render(scene, camera);
+        };
+        animate();
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            if (rafId !== null) cancelAnimationFrame(rafId);
+            rafId = null;
+          } else if (rafId === null) {
+            animate();
+          }
+        });
+      }
+    }
+  </script>
+</body>
+</html>
