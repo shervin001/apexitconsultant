@@ -2,9 +2,10 @@
    Apex IT Consultant — scene.js
    Three.js background: a journey through space. The hero opens
    on a particle network (enterprise systems); scrolling flies
-   the camera down past a distinct planet for each section —
-   rocky worlds, a ringed gas giant with moons, and finally a
-   holographic wireframe planet at the contact section.
+   the camera down past a distinct planet for each section while
+   rockets, shooting stars and asteroids pass by. At the end of
+   the page the camera dives into a huge destination planet —
+   atmosphere flash — and lands on a low-poly alien landscape.
 
    Performance rules:
    - pixel ratio capped at 2
@@ -12,7 +13,8 @@
    - rendering paused when the tab is hidden
    - static gradient fallback when WebGL is unavailable
      (the body background gradient acts as fallback)
-   - prefers-reduced-motion: camera + drift animation disabled
+   - prefers-reduced-motion: no camera/ambient animation, no
+     flash; scenes render as static frames per scroll position
    ============================================================ */
 
 import * as THREE from 'three';
@@ -42,6 +44,15 @@ function initScene() {
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const isMobile = window.matchMedia('(max-width: 767px)').matches;
 
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  const smoothstep = (a, b, v) => {
+    const t = clamp01((v - a) / (b - a));
+    return t * t * (3 - 2 * t);
+  };
+  const easeInCubic = (t) => t * t * t;
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
   /* ---------- Renderer / scene / camera ---------- */
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -59,7 +70,7 @@ function initScene() {
     60,
     window.innerWidth / window.innerHeight,
     0.1,
-    140
+    160
   );
   camera.position.set(0, 0, 30);
 
@@ -71,6 +82,48 @@ function initScene() {
   rim.position.set(-8, -4, -6);
   scene.add(rim);
   scene.add(new THREE.AmbientLight(0x2a3c61, 1.4));
+
+  /* ---------- Soft glow texture (nebulas, star heads, horizon) ---------- */
+  function makeGlowTexture(inner, mid) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, inner);
+    grad.addColorStop(0.4, mid);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  }
+
+  function makeSprite(texture, color, opacity, fogged) {
+    return new THREE.Sprite(new THREE.SpriteMaterial({
+      map: texture,
+      color,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: fogged,
+    }));
+  }
+
+  const glowTex = makeGlowTexture('rgba(255,255,255,0.85)', 'rgba(160,220,255,0.25)');
+
+  /* ---------- Nebula clouds for depth ---------- */
+  const NEBULAS = [
+    { x: -36, y: -14, z: -38, s: 80, color: 0x2451b8, o: 0.20 },
+    { x: 32, y: -40, z: -42, s: 66, color: 0x14727e, o: 0.18 },
+    { x: -28, y: -66, z: -40, s: 72, color: 0x8a6a2f, o: 0.12 },
+    { x: 26, y: -88, z: -46, s: 88, color: 0x2451b8, o: 0.18 },
+  ];
+  for (const n of NEBULAS.slice(0, isMobile ? 3 : 4)) {
+    const sp = makeSprite(glowTex, n.color, n.o, false);
+    sp.position.set(n.x, n.y, n.z);
+    sp.scale.set(n.s, n.s * 0.7, 1);
+    scene.add(sp);
+  }
 
   /* ---------- Particle network (hero) ---------- */
   const PARTICLE_COUNT = isMobile ? 90 : 220;
@@ -201,7 +254,7 @@ function initScene() {
     const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       arr[i * 3 + 0] = (Math.random() * 2 - 1) * spread.x;
-      arr[i * 3 + 1] = 20 - Math.random() * 130; // full scroll range
+      arr[i * 3 + 1] = 20 - Math.random() * 140; // full scroll range
       arr[i * 3 + 2] = -spread.zMin - Math.random() * (spread.zMax - spread.zMin);
     }
     geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
@@ -230,7 +283,6 @@ function initScene() {
       const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + seed * 91.3) * 43758.5453;
       return s - Math.floor(s);
     };
-    const lerp = (a, b, t) => a + (b - a) * t;
     const smooth = (t) => t * t * (3 - 2 * t);
     function noise3(x, y, z) {
       const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
@@ -318,7 +370,7 @@ function initScene() {
       group.add(core);
       group.userData.body = group; // spin the whole hologram
     } else {
-      const detail = isMobile ? 2 : 3;
+      const detail = def.detail || (isMobile ? 2 : 3);
       const geo = new THREE.IcosahedronGeometry(r, detail);
       if (def.displace > 0) {
         const noise = makeNoise(def.seed || 1);
@@ -387,12 +439,13 @@ function initScene() {
     group.position.set(
       def.side * (isMobile ? 6.5 : def.x),
       0, // y assigned by placePlanets()
-      isMobile ? -11 : def.z
+      isMobile && !def.big ? -11 : def.z
     );
     group.rotation.z = def.tilt || 0;
     group.userData.spin = def.spin;
     group.userData.section = def.section;
     group.userData.yOffset = def.yOffset || 0;
+    group.userData.bigRadius = r;
     scene.add(group);
     planets.push(group);
     return group;
@@ -454,6 +507,461 @@ function initScene() {
     spin: 0.35, tilt: 0.2,
   });
 
+  // The destination: a huge world centered under the landing section.
+  // The camera dives into it at the end of the journey.
+  const bigPlanet = makePlanet({
+    section: '#landing',
+    side: 0, x: 0, z: -26, big: true,
+    radius: 15, displace: 0.05, seed: 77, detail: isMobile ? 3 : 4,
+    color: 0x18535e, emissive: 0x07272e,
+    atmosphere: 0x67e8f9, atmosphereStrength: 0.9,
+    spin: 0.1, tilt: 0.12,
+  });
+
+  /* ============================================================
+     Ambient traffic: rockets, shooting stars, asteroids.
+     All spawn near the camera's current altitude and despawn
+     off-screen. None of this exists under reduced motion.
+     ============================================================ */
+  const EXTENT_X = 38;
+
+  /* ---------- Rockets with exhaust trails ---------- */
+  const TRAIL_N = 80;
+
+  function buildRocket() {
+    const g = new THREE.Group();
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0xdde6f2, roughness: 0.35, metalness: 0.55 });
+    const accentMat = new THREE.MeshStandardMaterial({ color: 0xe8c15a, roughness: 0.4, metalness: 0.6 });
+
+    const hull = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.5, 10), hullMat);
+    g.add(hull);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.55, 10), accentMat);
+    nose.position.y = 1.02;
+    g.add(nose);
+    const porthole = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x67e8f9 })
+    );
+    porthole.position.set(0, 0.35, 0.24);
+    g.add(porthole);
+    for (let i = 0; i < 3; i++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.34), accentMat);
+      const a = (i / 3) * Math.PI * 2;
+      fin.position.set(Math.sin(a) * 0.26, -0.62, Math.cos(a) * 0.26);
+      fin.rotation.y = a;
+      g.add(fin);
+    }
+    const flame = new THREE.Mesh(
+      new THREE.ConeGeometry(0.16, 0.9, 8),
+      new THREE.MeshBasicMaterial({
+        color: 0x9feaff,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    flame.rotation.x = Math.PI;
+    flame.position.y = -1.2;
+    g.add(flame);
+
+    // World-space exhaust trail (ring buffer of fading points).
+    const tPos = new Float32Array(TRAIL_N * 3);
+    const tCol = new Float32Array(TRAIL_N * 3);
+    const tGeo = new THREE.BufferGeometry();
+    tGeo.setAttribute('position', new THREE.BufferAttribute(tPos, 3).setUsage(THREE.DynamicDrawUsage));
+    tGeo.setAttribute('color', new THREE.BufferAttribute(tCol, 3).setUsage(THREE.DynamicDrawUsage));
+    const trail = new THREE.Points(tGeo, new THREE.PointsMaterial({
+      size: 0.22,
+      vertexColors: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }));
+    scene.add(trail);
+
+    g.visible = false;
+    scene.add(g);
+    return {
+      group: g, flame, trail, tPos, tCol, tGeo,
+      head: 0, alive: false,
+      vel: new THREE.Vector3(), scale: 1,
+    };
+  }
+
+  const rockets = Array.from({ length: isMobile ? 1 : 2 }, buildRocket);
+  const tmpV = new THREE.Vector3();
+  const UP_Y = new THREE.Vector3(0, 1, 0);
+
+  function launchRocket(r, camY) {
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const speed = 8 + Math.random() * 5;
+    r.vel.set(dir * speed, (Math.random() - 0.5) * 3, 0);
+    r.group.position.set(
+      -dir * EXTENT_X,
+      camY + (Math.random() - 0.5) * 16,
+      -3 - Math.random() * 11
+    );
+    r.scale = 0.8 + Math.random() * 0.7;
+    r.group.scale.setScalar(r.scale);
+    r.group.quaternion.setFromUnitVectors(UP_Y, tmpV.copy(r.vel).normalize());
+    r.tCol.fill(0);
+    r.alive = true;
+    r.group.visible = true;
+  }
+
+  function updateRocket(r, dtSec, dt, t, camY) {
+    if (r.alive) {
+      r.group.position.addScaledVector(r.vel, dtSec);
+      r.group.rotateY(0.03 * dt); // slow roll around its axis
+      r.flame.scale.set(1, 0.8 + Math.sin(t * 31 + r.scale * 40) * 0.25, 1);
+
+      // Emit a trail point at the engine.
+      tmpV.set(0, -1.5, 0).applyQuaternion(r.group.quaternion).multiplyScalar(r.scale).add(r.group.position);
+      const h = r.head * 3;
+      r.tPos[h] = tmpV.x; r.tPos[h + 1] = tmpV.y; r.tPos[h + 2] = tmpV.z;
+      r.tCol[h] = 0.62; r.tCol[h + 1] = 0.88; r.tCol[h + 2] = 1.0;
+      r.head = (r.head + 1) % TRAIL_N;
+
+      if (Math.abs(r.group.position.x) > EXTENT_X + 4 || Math.abs(r.group.position.y - camY) > 34) {
+        r.alive = false;
+        r.group.visible = false;
+      }
+    }
+    // Fade the whole trail (also after despawn, so it dissolves).
+    const fade = Math.pow(0.955, dt);
+    for (let i = 0; i < r.tCol.length; i++) r.tCol[i] *= fade;
+    r.tGeo.attributes.position.needsUpdate = true;
+    r.tGeo.attributes.color.needsUpdate = true;
+  }
+
+  /* ---------- Shooting stars with trails ---------- */
+  const SHOOT_SEGS = 14;
+
+  function buildShootingStar() {
+    const geo = new THREE.BufferGeometry();
+    const pts = new Float32Array(SHOOT_SEGS * 3);
+    const cols = new Float32Array(SHOOT_SEGS * 3);
+    const len = 7 + Math.random() * 4;
+    for (let i = 0; i < SHOOT_SEGS; i++) {
+      const f = i / (SHOOT_SEGS - 1);
+      pts[i * 3] = -f * len; // trail extends behind the head along -x
+      const b = Math.pow(1 - f, 2);
+      cols[i * 3] = 0.95 * b; cols[i * 3 + 1] = 0.98 * b; cols[i * 3 + 2] = 1.0 * b;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    }));
+    const head = makeSprite(glowTex, 0xeaf8ff, 1, false);
+    head.scale.set(1.4, 1.4, 1);
+    line.add(head);
+    line.visible = false;
+    scene.add(line);
+    return { line, alive: false, vel: new THREE.Vector3(), traveled: 0, range: 0 };
+  }
+
+  const shootingStars = Array.from({ length: isMobile ? 2 : 3 }, buildShootingStar);
+  const X_AXIS = new THREE.Vector3(1, 0, 0);
+
+  function launchShootingStar(s, camY) {
+    const dir = tmpV.set(
+      (Math.random() < 0.5 ? 1 : -1) * (0.7 + Math.random() * 0.5),
+      -(0.45 + Math.random() * 0.6),
+      0
+    ).normalize();
+    s.vel.copy(dir).multiplyScalar(26 + Math.random() * 16);
+    s.line.position.set(
+      (Math.random() * 2 - 1) * 34,
+      camY + 6 + Math.random() * 14,
+      -22 - Math.random() * 16
+    );
+    s.line.quaternion.setFromUnitVectors(X_AXIS, dir);
+    s.traveled = 0;
+    s.range = 30 + Math.random() * 14;
+    s.alive = true;
+    s.line.visible = true;
+  }
+
+  function updateShootingStar(s, dtSec) {
+    if (!s.alive) return;
+    const step = s.vel.length() * dtSec;
+    s.traveled += step;
+    s.line.position.addScaledVector(s.vel, dtSec);
+    const f = s.traveled / s.range;
+    // Quick fade-in, long fade-out.
+    s.line.material.opacity = f < 0.12 ? f / 0.12 : Math.max(0, 1 - (f - 0.12) / 0.88);
+    s.line.children[0].material.opacity = s.line.material.opacity;
+    if (f >= 1) {
+      s.alive = false;
+      s.line.visible = false;
+    }
+  }
+
+  /* ---------- Drifting asteroids ---------- */
+  function buildAsteroid() {
+    const r = 0.35 + Math.random() * 0.5;
+    const geo = new THREE.IcosahedronGeometry(r, 1);
+    const noise = makeNoise(Math.floor(Math.random() * 100));
+    const pos = geo.attributes.position;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).normalize();
+      const n = noise(v.x * 2.2, v.y * 2.2, v.z * 2.2);
+      const len = r * (1 + (n - 0.5) * 0.75);
+      pos.setXYZ(i, v.x * len, v.y * len, v.z * len);
+    }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: 0x5a6a80,
+      flatShading: true,
+      roughness: 1,
+      metalness: 0.05,
+    }));
+    mesh.visible = false;
+    scene.add(mesh);
+    return {
+      mesh, alive: false,
+      vel: new THREE.Vector3(),
+      tumble: { x: (Math.random() - 0.5) * 0.02, y: (Math.random() - 0.5) * 0.02 },
+    };
+  }
+
+  const asteroids = Array.from({ length: isMobile ? 1 : 3 }, buildAsteroid);
+
+  function launchAsteroid(a, camY) {
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    a.vel.set(dir * (0.7 + Math.random() * 0.9), (Math.random() - 0.5) * 0.5, 0);
+    a.mesh.position.set(
+      -dir * EXTENT_X,
+      camY + (Math.random() - 0.5) * 20,
+      -6 - Math.random() * 12
+    );
+    a.alive = true;
+    a.mesh.visible = true;
+  }
+
+  function updateAsteroid(a, dtSec, dt, camY) {
+    if (!a.alive) return;
+    a.mesh.position.addScaledVector(a.vel, dtSec);
+    a.mesh.rotation.x += a.tumble.x * dt;
+    a.mesh.rotation.y += a.tumble.y * dt;
+    if (Math.abs(a.mesh.position.x) > EXTENT_X + 4 || Math.abs(a.mesh.position.y - camY) > 36) {
+      a.alive = false;
+      a.mesh.visible = false;
+    }
+  }
+
+  // Spawn scheduling (elapsed-time based, so pauses don't burst-spawn).
+  let nextRocketAt = 2.5;
+  let nextShootAt = 1.5;
+  let nextAsteroidAt = 6;
+
+  function updateAmbient(dtSec, dt, t, camY, spaceActive) {
+    if (spaceActive) {
+      if (t >= nextRocketAt) {
+        const free = rockets.find((r) => !r.alive);
+        if (free) launchRocket(free, camY);
+        nextRocketAt = t + 7 + Math.random() * 9;
+      }
+      if (t >= nextShootAt) {
+        const free = shootingStars.find((s) => !s.alive);
+        if (free) launchShootingStar(free, camY);
+        nextShootAt = t + 2.5 + Math.random() * 4.5;
+      }
+      if (t >= nextAsteroidAt) {
+        const free = asteroids.find((a) => !a.alive);
+        if (free) launchAsteroid(free, camY);
+        nextAsteroidAt = t + 9 + Math.random() * 9;
+      }
+    }
+    for (const r of rockets) updateRocket(r, dtSec, dt, t, camY);
+    for (const s of shootingStars) updateShootingStar(s, dtSec);
+    for (const a of asteroids) updateAsteroid(a, dtSec, dt, camY);
+  }
+
+  /* ============================================================
+     The landscape: inside the destination planet. Revealed by the
+     atmosphere-entry flash at the end of the landing dive.
+     ============================================================ */
+  const landscape = buildLandscape();
+
+  function buildLandscape() {
+    const ls = new THREE.Scene();
+    ls.fog = new THREE.Fog(0x081820, 26, 135);
+
+    const lsSun = new THREE.DirectionalLight(0xffd9a0, 2.2);
+    lsSun.position.set(-40, 18, -60);
+    ls.add(lsSun);
+    ls.add(new THREE.AmbientLight(0x27455c, 1.5));
+    ls.add(new THREE.HemisphereLight(0x67e8f9, 0x0b2a33, 0.5));
+
+    // Terrain: noise-displaced plane, flat-shaded. A gentler valley
+    // near the origin (where the camera settles), mountains far out.
+    const tNoise = makeNoise(99);
+    function terrainHeight(x, z) {
+      const d = Math.sqrt(x * x + z * z);
+      let h = tNoise(x * 0.02 + 5, 0, z * 0.02 + 5) * 14 + tNoise(x * 0.06, 0, z * 0.06) * 4;
+      h *= Math.min(1, Math.max(0.15, (d - 8) / 70));
+      h += Math.max(0, d - 70) * 0.25 * (0.6 + tNoise(x * 0.01, 3, z * 0.01));
+      return h - 2;
+    }
+
+    const seg = isMobile ? 64 : 110;
+    const tGeo = new THREE.PlaneGeometry(280, 280, seg, seg);
+    tGeo.rotateX(-Math.PI / 2);
+    const tPos = tGeo.attributes.position;
+    for (let i = 0; i < tPos.count; i++) {
+      tPos.setY(i, terrainHeight(tPos.getX(i), tPos.getZ(i)));
+    }
+    tGeo.computeVertexNormals();
+    ls.add(new THREE.Mesh(tGeo, new THREE.MeshStandardMaterial({
+      color: 0x16424f,
+      emissive: 0x04141c,
+      emissiveIntensity: 0.5,
+      flatShading: true,
+      roughness: 0.95,
+      metalness: 0.05,
+    })));
+
+    // Glowing crystals scattered across the valley.
+    const crystalMat = new THREE.MeshStandardMaterial({
+      color: 0x0f3a44,
+      emissive: 0x22d3ee,
+      emissiveIntensity: 0.65,
+      flatShading: true,
+      roughness: 0.4,
+      metalness: 0.2,
+    });
+    const crystalCount = isMobile ? 18 : 40;
+    for (let i = 0; i < crystalCount; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = 10 + Math.random() * 85;
+      const x = Math.cos(a) * d, z = Math.sin(a) * d - 20;
+      const h = 0.8 + Math.random() * 3.2;
+      const crystal = new THREE.Mesh(new THREE.ConeGeometry(0.18 + Math.random() * 0.5, h, 5), crystalMat);
+      crystal.position.set(x, terrainHeight(x, z) + h / 2 - 0.25, z);
+      crystal.rotation.y = Math.random() * Math.PI;
+      crystal.rotation.z = (Math.random() - 0.5) * 0.24;
+      ls.add(crystal);
+    }
+
+    // A landing beacon near the camera's resting point.
+    const beacon = new THREE.Group();
+    const bx = 5, bz = 4;
+    const by = terrainHeight(bx, bz);
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.09, 2.6, 8),
+      new THREE.MeshStandardMaterial({ color: 0xdde6f2, roughness: 0.4, metalness: 0.6 })
+    );
+    pole.position.y = 1.3;
+    beacon.add(pole);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0x9feaff })
+    );
+    bulb.position.y = 2.75;
+    beacon.add(bulb);
+    const bulbGlow = makeSprite(glowTex, 0x67e8f9, 0.9, false);
+    bulbGlow.scale.set(2.4, 2.4, 1);
+    bulbGlow.position.y = 2.75;
+    beacon.add(bulbGlow);
+    const beaconLight = new THREE.PointLight(0x22d3ee, 14, 34, 1.6);
+    beaconLight.position.y = 2.9;
+    beacon.add(beaconLight);
+    beacon.position.set(bx, by, bz);
+    ls.add(beacon);
+
+    // Sky: stars, a huge ringed sibling planet, a moon, horizon glow.
+    const skyStarGeo = new THREE.BufferGeometry();
+    const skyStarCount = isMobile ? 140 : 320;
+    const skyArr = new Float32Array(skyStarCount * 3);
+    for (let i = 0; i < skyStarCount; i++) {
+      skyArr[i * 3] = (Math.random() * 2 - 1) * 130;
+      skyArr[i * 3 + 1] = 6 + Math.random() * 85;
+      skyArr[i * 3 + 2] = -30 - Math.random() * 105;
+    }
+    skyStarGeo.setAttribute('position', new THREE.BufferAttribute(skyArr, 3));
+    ls.add(new THREE.Points(skyStarGeo, new THREE.PointsMaterial({
+      color: 0xdbe6ff,
+      size: 0.5,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    })));
+
+    const skyPlanet = new THREE.Group();
+    const spBody = new THREE.Mesh(
+      new THREE.SphereGeometry(13, 32, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0x2a4d8f, emissive: 0x121f45, emissiveIntensity: 0.5,
+        roughness: 0.9, metalness: 0.05, fog: false,
+      })
+    );
+    skyPlanet.add(spBody);
+    const spRing = new THREE.Mesh(
+      new THREE.RingGeometry(18, 27, 64),
+      new THREE.MeshBasicMaterial({
+        color: 0xe8c15a, side: THREE.DoubleSide, transparent: true,
+        opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+      })
+    );
+    spRing.rotation.x = -1.25;
+    skyPlanet.add(spRing);
+    skyPlanet.position.set(-52, 26, -108);
+    skyPlanet.rotation.z = 0.15;
+    ls.add(skyPlanet);
+
+    const skyMoon = new THREE.Mesh(
+      new THREE.SphereGeometry(3.4, 20, 16),
+      new THREE.MeshStandardMaterial({
+        color: 0x9fb2cc, emissive: 0x2a3448, emissiveIntensity: 0.5,
+        roughness: 0.95, metalness: 0, fog: false,
+      })
+    );
+    skyMoon.position.set(48, 34, -95);
+    ls.add(skyMoon);
+
+    const horizon = makeSprite(glowTex, 0x1d97b8, 0.5, false);
+    horizon.scale.set(280, 70, 1);
+    horizon.position.set(0, 2, -120);
+    ls.add(horizon);
+
+    return { scene: ls, beaconLight, bulbGlow };
+  }
+
+  /* ---------- Landing sequence state ---------- */
+  const DIVE_END = 0.7; // fraction of the landing scroll where the flash peaks
+  const landingEl = document.getElementById('landing');
+  const landingCopy = document.getElementById('landing-copy');
+  const flashEl = document.getElementById('landing-flash');
+
+  function landingProgress() {
+    if (!landingEl) return 0;
+    const r = landingEl.getBoundingClientRect();
+    const total = r.height - window.innerHeight;
+    if (total <= 0) return r.top < 0 ? 1 : 0;
+    return clamp01(-r.top / total);
+  }
+
+  function applyLandingUI(L) {
+    if (landingCopy) landingCopy.classList.toggle('landed', L > 0.8);
+    if (flashEl && !prefersReducedMotion) {
+      let flash = 0;
+      if (L > 0.58 && L < DIVE_END) flash = smoothstep(0.58, DIVE_END, L);
+      else if (L >= DIVE_END) flash = 1 - smoothstep(DIVE_END, 0.84, L);
+      flashEl.style.opacity = (flash * flash).toFixed(3);
+    }
+  }
+
   /* ---------- Scroll + mouse state ---------- */
   const CAMERA_TRAVEL = 82; // world units of descent over the full page
 
@@ -475,7 +983,7 @@ function initScene() {
       if (!el) continue;
       const rect = el.getBoundingClientRect();
       const centerScroll = rect.top + window.scrollY + rect.height / 2 - winH / 2;
-      const progress = Math.min(1, Math.max(0, max > 0 ? centerScroll / max : 0));
+      const progress = clamp01(max > 0 ? centerScroll / max : 0);
       p.position.y = -progress * CAMERA_TRAVEL + p.userData.yOffset;
     }
   }
@@ -534,56 +1042,107 @@ function initScene() {
     const dt = dtSec * 60; // normalized to ~60fps steps
     const t = elapsed;
 
-    // Camera: descend with scroll, lean toward the planet being passed,
-    // drift with mouse parallax. Exponential smoothing scaled by dt so
-    // speed is refresh-rate independent.
-    const targetY = -scrollProgress * CAMERA_TRAVEL;
+    const L = landingProgress();
+    applyLandingUI(L);
 
-    // Find the planet nearest to the camera's target altitude and lean
-    // gently toward its side of the screen — "flying to the planet".
-    let lean = 0;
-    let bestDist = Infinity;
-    for (const p of planets) {
-      const d = Math.abs(p.position.y - targetY);
-      if (d < bestDist) {
-        bestDist = d;
-        lean = bestDist < 18 ? p.position.x * 0.1 : 0;
+    if (L < DIVE_END) {
+      /* ----- Space: normal journey + dive approach ----- */
+      const dive = L <= 0 ? 0 : easeInCubic(clamp01(L / DIVE_END));
+
+      const targetY = -scrollProgress * CAMERA_TRAVEL;
+
+      // Find the planet nearest to the camera's target altitude and lean
+      // gently toward its side of the screen — "flying to the planet".
+      let lean = 0;
+      let bestDist = Infinity;
+      for (const p of planets) {
+        const d = Math.abs(p.position.y - targetY);
+        if (d < bestDist) {
+          bestDist = d;
+          lean = bestDist < 18 ? p.position.x * 0.1 : 0;
+        }
       }
-    }
+      lean *= 1 - dive;
 
-    const targetX = (hasMouse ? mouse.x * 2.2 : Math.sin(t * 0.1) * 0.8) + lean;
-    camera.position.y += (targetY - camera.position.y) * (1 - Math.pow(0.94, dt));
-    camera.position.x += (targetX - camera.position.x) * (1 - Math.pow(0.97, dt));
-    camera.position.z = 30 - Math.min(scrollProgress * 4, 4);
-    camera.lookAt(0, camera.position.y, 0);
+      let desX = (hasMouse ? mouse.x * 2.2 : Math.sin(t * 0.1) * 0.8) * (1 - dive) + lean;
+      let desY = targetY;
+      let desZ = 30 - Math.min(scrollProgress * 4, 4);
 
-    // Hero network: only pay for it while it can be seen.
-    if (camera.position.y > -40) {
-      updateNetwork(dt, cursorWorldPoint());
-      points.rotation.y = Math.sin(t * 0.05) * 0.12;
-      lines.rotation.y = points.rotation.y;
-    }
-
-    // Planets: slow spin, orbiting moons, a barely-visible float.
-    for (const p of planets) {
-      p.userData.body.rotation.y += 0.0026 * p.userData.spin * dt * 10;
-      for (const m of p.userData.moons || []) {
-        m.pivot.rotation.y = t * m.speed + m.phase;
+      // Dive: accelerate toward the big planet's surface.
+      if (dive > 0) {
+        const bp = bigPlanet.position;
+        const R = bigPlanet.userData.bigRadius;
+        desX = lerp(desX, bp.x, dive);
+        desY = lerp(desY, bp.y + 2.5, dive);
+        desZ = lerp(desZ, bp.z + R + 2.6, dive);
       }
+
+      // Exponential smoothing scaled by dt: refresh-rate independent.
+      const ky = 1 - Math.pow(0.94, dt);
+      const kx = 1 - Math.pow(0.97, dt);
+      camera.position.x += (desX - camera.position.x) * kx;
+      camera.position.y += (desY - camera.position.y) * ky;
+      camera.position.z += (desZ - camera.position.z) * ky;
+      camera.lookAt(
+        lerp(0, bigPlanet.position.x, dive),
+        lerp(camera.position.y, bigPlanet.position.y, dive),
+        lerp(0, bigPlanet.position.z, dive)
+      );
+
+      // Hero network: only pay for it while it can be seen.
+      if (camera.position.y > -40) {
+        updateNetwork(dt, cursorWorldPoint());
+        points.rotation.y = Math.sin(t * 0.05) * 0.12;
+        lines.rotation.y = points.rotation.y;
+      }
+
+      // Planets: slow spin and orbiting moons.
+      for (const p of planets) {
+        p.userData.body.rotation.y += 0.0026 * p.userData.spin * dt * 10;
+        for (const m of p.userData.moons || []) {
+          m.pivot.rotation.y = t * m.speed + m.phase;
+        }
+      }
+
+      starsFar.rotation.y = t * 0.004;
+      starsNear.rotation.y = t * 0.008;
+
+      updateAmbient(dtSec, dt, t, camera.position.y, L < 0.4);
+
+      renderer.render(scene, camera);
+    } else {
+      /* ----- Landscape: after the atmosphere flash ----- */
+      const P = easeOutCubic(clamp01((L - DIVE_END) / (1 - DIVE_END)));
+
+      const px = hasMouse ? mouse.x * 1.3 * P : Math.sin(t * 0.12) * 0.5;
+      camera.position.set(
+        px,
+        lerp(30, 9, P) + Math.sin(t * 0.5) * 0.25 * P,
+        lerp(46, 20, P)
+      );
+      camera.lookAt(0, 7, -70);
+
+      landscape.beaconLight.intensity = 12 + Math.sin(t * 2.6) * 5;
+      landscape.bulbGlow.material.opacity = 0.7 + Math.sin(t * 2.6) * 0.25;
+
+      renderer.render(landscape.scene, camera);
     }
-
-    starsFar.rotation.y = t * 0.004;
-    starsNear.rotation.y = t * 0.008;
-
-    renderer.render(scene, camera);
   }
 
   // Reduced motion: a single static frame (re-rendered only on resize/scroll).
   function renderStatic() {
-    updateNetwork(0, null);
-    camera.position.set(0, -scrollProgress * CAMERA_TRAVEL, 30);
-    camera.lookAt(0, camera.position.y, 0);
-    renderer.render(scene, camera);
+    const L = landingProgress();
+    if (landingCopy) landingCopy.classList.toggle('landed', L > DIVE_END);
+    if (L >= DIVE_END) {
+      camera.position.set(0, 9, 20);
+      camera.lookAt(0, 7, -70);
+      renderer.render(landscape.scene, camera);
+    } else {
+      updateNetwork(0, null);
+      camera.position.set(0, -scrollProgress * CAMERA_TRAVEL, 30);
+      camera.lookAt(0, camera.position.y, 0);
+      renderer.render(scene, camera);
+    }
   }
 
   if (prefersReducedMotion) {

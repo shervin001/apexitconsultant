@@ -702,6 +702,58 @@ html.js .reveal.visible {
 }
 .steps-list li::marker { color: var(--cyan); font-weight: 600; }
 
+/* ---------- Landing finale ----------
+   A tall section: scrolling through it drives the dive into the
+   destination planet (js/scene.js). The sticky inner frame holds
+   the copy in place during the descent. */
+.landing {
+  height: 200vh;
+  position: relative;
+}
+.landing-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.landing-copy {
+  text-align: center;
+  max-width: 680px;
+}
+/* Hidden-until-landed only when JS is running to reveal it */
+html.js .landing-copy {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.9s ease, transform 0.9s ease;
+}
+html.js .landing-copy.landed {
+  opacity: 1;
+  transform: none;
+}
+.landing-title {
+  font-size: clamp(2.1rem, 4.8vw, 3.5rem);
+  margin-bottom: 1.1rem;
+}
+.landing-sub {
+  color: var(--muted);
+  font-size: 1.05rem;
+  margin-bottom: 2.2rem;
+}
+
+#landing-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 58%,
+    #eafcff 0%, #b5eeff 30%, rgba(34, 211, 238, 0.75) 58%,
+    rgba(59, 130, 246, 0.35) 78%, rgba(5, 8, 16, 0) 100%);
+}
+
 /* ---------- Footer ---------- */
 .footer {
   border-top: 1px solid var(--line);
@@ -851,6 +903,8 @@ html.js .reveal.visible {
     transition-duration: 0.001s !important;
   }
   html.js .reveal { opacity: 1; transform: none; }
+  html.js .landing-copy { opacity: 1; transform: none; }
+  #landing-flash { display: none; }
   .scroll-hint-dot { animation: none; }
   .logo-track { animation: none !important; }
 }

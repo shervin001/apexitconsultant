@@ -26,7 +26,11 @@ privacy.html    Privacy policy (template text — review before launch)
 css/styles.css  Design system: dark theme, glassmorphism, responsive, reduced-motion
 js/scene.js     Three.js background: particle network hero, then a scroll-driven
                 camera journey past a procedural planet per section (starfield,
-                displaced low-poly planets, rings, moons, holographic planet)
+                nebulas, displaced low-poly planets, rings, moons, holographic
+                planet) with ambient traffic (rockets with exhaust trails,
+                shooting stars, asteroids). The page ends with a dive into the
+                destination planet: atmosphere flash, then a low-poly landscape
+                with crystals, a beacon and a ringed planet on the horizon.
 js/main.js      UI: navbar, mobile menu, reveals, counters, card tilt, form handling
 ```
 
