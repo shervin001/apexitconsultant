@@ -1,11 +1,14 @@
 /* ============================================================
    Apex IT Consultant — scene.js
-   Three.js background: particle network hero, scroll-driven
-   camera, floating accent shapes per section.
+   Three.js background: a journey through space. The hero opens
+   on a particle network (enterprise systems); scrolling flies
+   the camera down past a distinct planet for each section —
+   rocky worlds, a ringed gas giant with moons, and finally a
+   holographic wireframe planet at the contact section.
 
    Performance rules:
    - pixel ratio capped at 2
-   - reduced particle count on mobile
+   - reduced particle/geometry detail on mobile
    - rendering paused when the tab is hidden
    - static gradient fallback when WebGL is unavailable
      (the body background gradient acts as fallback)
@@ -50,15 +53,24 @@ function initScene() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x050810, 0.016);
+  scene.fog = new THREE.FogExp2(0x050810, 0.011);
 
   const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
     0.1,
-    120
+    140
   );
   camera.position.set(0, 0, 30);
+
+  /* ---------- Lighting (for the planets) ---------- */
+  const sun = new THREE.DirectionalLight(0xcfe0ff, 2.6);
+  sun.position.set(7, 6, 10);
+  scene.add(sun);
+  const rim = new THREE.DirectionalLight(0xe8c15a, 0.8);
+  rim.position.set(-8, -4, -6);
+  scene.add(rim);
+  scene.add(new THREE.AmbientLight(0x2a3c61, 1.4));
 
   /* ---------- Particle network (hero) ---------- */
   const PARTICLE_COUNT = isMobile ? 90 : 220;
@@ -183,74 +195,264 @@ function initScene() {
     linesGeo.attributes.color.needsUpdate = true;
   }
 
-  /* ---------- Ambient dust across the whole scroll range ---------- */
-  const DUST_COUNT = isMobile ? 120 : 320;
-  const dustPositions = new Float32Array(DUST_COUNT * 3);
-  for (let i = 0; i < DUST_COUNT; i++) {
-    dustPositions[i * 3 + 0] = (Math.random() * 2 - 1) * 34;
-    dustPositions[i * 3 + 1] = 8 - Math.random() * 90; // spread down the page
-    dustPositions[i * 3 + 2] = (Math.random() * 2 - 1) * 14;
+  /* ---------- Starfield across the whole journey ---------- */
+  function makeStars(count, size, color, opacity, spread) {
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      arr[i * 3 + 0] = (Math.random() * 2 - 1) * spread.x;
+      arr[i * 3 + 1] = 20 - Math.random() * 130; // full scroll range
+      arr[i * 3 + 2] = -spread.zMin - Math.random() * (spread.zMax - spread.zMin);
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.PointsMaterial({
+      color, size,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const stars = new THREE.Points(geo, mat);
+    scene.add(stars);
+    return stars;
   }
-  const dustGeo = new THREE.BufferGeometry();
-  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-  const dustMat = new THREE.PointsMaterial({
-    color: 0x3b82f6,
-    size: 0.09,
-    transparent: true,
-    opacity: 0.45,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const dust = new THREE.Points(dustGeo, dustMat);
-  scene.add(dust);
+  const starsFar = makeStars(isMobile ? 160 : 420, 0.12, 0xdbe6ff, 0.8, { x: 70, zMin: 22, zMax: 48 });
+  const starsNear = makeStars(isMobile ? 90 : 240, 0.09, 0x3b82f6, 0.5, { x: 40, zMin: 6, zMax: 20 });
 
-  /* ---------- Section accent shapes ---------- */
-  function makeAccent(geometry, { x, y, z, color, scale = 1 }) {
+  /* ---------- Procedural planets ----------
+     Low-poly displaced icosahedrons, fresnel atmosphere, optional
+     rings and orbiting moons. No textures — everything procedural,
+     so nothing external can fail to load. */
+
+  // Small 3-octave value noise for terrain displacement.
+  function makeNoise(seed) {
+    const rand = (x, y, z) => {
+      const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + seed * 91.3) * 43758.5453;
+      return s - Math.floor(s);
+    };
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const smooth = (t) => t * t * (3 - 2 * t);
+    function noise3(x, y, z) {
+      const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+      const xf = smooth(x - xi), yf = smooth(y - yi), zf = smooth(z - zi);
+      const v000 = rand(xi, yi, zi),         v100 = rand(xi + 1, yi, zi);
+      const v010 = rand(xi, yi + 1, zi),     v110 = rand(xi + 1, yi + 1, zi);
+      const v001 = rand(xi, yi, zi + 1),     v101 = rand(xi + 1, yi, zi + 1);
+      const v011 = rand(xi, yi + 1, zi + 1), v111 = rand(xi + 1, yi + 1, zi + 1);
+      return lerp(
+        lerp(lerp(v000, v100, xf), lerp(v010, v110, xf), yf),
+        lerp(lerp(v001, v101, xf), lerp(v011, v111, xf), yf),
+        zf
+      );
+    }
+    return (x, y, z) => {
+      let amp = 1, freq = 1, sum = 0, norm = 0;
+      for (let o = 0; o < 3; o++) {
+        sum += noise3(x * freq + 31, y * freq + 17, z * freq + 57) * amp;
+        norm += amp;
+        amp *= 0.5;
+        freq *= 2.1;
+      }
+      return sum / norm; // 0..1
+    };
+  }
+
+  // Fresnel glow shell — bright at the limb, invisible face-on.
+  function makeAtmosphere(radius, color, strength) {
+    return new THREE.Mesh(
+      new THREE.SphereGeometry(radius, isMobile ? 24 : 40, isMobile ? 18 : 30),
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uColor: { value: new THREE.Color(color) },
+          uStrength: { value: strength },
+        },
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vView;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            vView = normalize(-mv.xyz);
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform float uStrength;
+          varying vec3 vNormal;
+          varying vec3 vView;
+          void main() {
+            float f = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.6);
+            gl_FragColor = vec4(uColor, f * uStrength);
+          }`,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+  }
+
+  const planets = [];
+
+  function makePlanet(def) {
     const group = new THREE.Group();
-    const wire = new THREE.Mesh(
-      geometry,
-      new THREE.MeshBasicMaterial({
-        color,
+    const r = def.radius * (isMobile ? 0.8 : 1);
+
+    if (def.holo) {
+      // Holographic "digital planet": wireframe shell + faint core.
+      const geo = new THREE.IcosahedronGeometry(r, 1);
+      group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: def.color,
         wireframe: true,
         transparent: true,
-        opacity: 0.32,
+        opacity: 0.62,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-      })
-    );
-    const core = new THREE.Mesh(
-      geometry.clone(),
-      new THREE.MeshBasicMaterial({
-        color,
+      })));
+      const core = new THREE.Mesh(new THREE.IcosahedronGeometry(r * 0.97, 1), new THREE.MeshBasicMaterial({
+        color: def.color,
         transparent: true,
-        opacity: 0.05,
+        opacity: 0.06,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-      })
+      }));
+      group.add(core);
+      group.userData.body = group; // spin the whole hologram
+    } else {
+      const detail = isMobile ? 2 : 3;
+      const geo = new THREE.IcosahedronGeometry(r, detail);
+      if (def.displace > 0) {
+        const noise = makeNoise(def.seed || 1);
+        const pos = geo.attributes.position;
+        const v = new THREE.Vector3();
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).normalize();
+          const n = noise(v.x * 1.7, v.y * 1.7, v.z * 1.7);
+          const len = r * (1 + (n - 0.5) * 2 * def.displace);
+          pos.setXYZ(i, v.x * len, v.y * len, v.z * len);
+        }
+        geo.computeVertexNormals();
+      }
+      const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        color: def.color,
+        emissive: def.emissive || 0x000000,
+        emissiveIntensity: 0.35,
+        flatShading: true,
+        roughness: 0.85,
+        metalness: 0.12,
+      }));
+      if (def.oblate) body.scale.y = def.oblate;
+      group.add(body);
+      group.userData.body = body;
+    }
+
+    if (def.atmosphere) {
+      group.add(makeAtmosphere(r * 1.16, def.atmosphere, def.atmosphereStrength || 0.7));
+    }
+
+    for (const ringDef of def.rings || []) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(r * ringDef.inner, r * ringDef.outer, 72),
+        new THREE.MeshBasicMaterial({
+          color: ringDef.color,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: ringDef.opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+      );
+      ring.rotation.x = ringDef.tiltX;
+      ring.rotation.y = ringDef.tiltY || 0;
+      group.add(ring);
+    }
+
+    group.userData.moons = (def.moons || []).map((m) => {
+      const pivot = new THREE.Group();
+      pivot.rotation.x = m.tilt || 0.25;
+      const moon = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(m.radius, 1),
+        new THREE.MeshStandardMaterial({
+          color: m.color || 0x8593ab,
+          flatShading: true,
+          roughness: 0.9,
+          metalness: 0.05,
+        })
+      );
+      moon.position.x = r * m.dist;
+      pivot.add(moon);
+      group.add(pivot);
+      return { pivot, speed: m.speed, phase: m.phase || 0 };
+    });
+
+    group.position.set(
+      def.side * (isMobile ? 6.5 : def.x),
+      0, // y assigned by placePlanets()
+      isMobile ? -11 : def.z
     );
-    core.scale.setScalar(0.96);
-    group.add(wire, core);
-    group.position.set(x, y, z);
-    group.scale.setScalar(scale);
-    group.userData.spin = 0.1 + Math.random() * 0.15;
-    group.userData.bobOffset = Math.random() * Math.PI * 2;
-    group.userData.baseY = y;
+    group.rotation.z = def.tilt || 0;
+    group.userData.spin = def.spin;
+    group.userData.section = def.section;
+    group.userData.yOffset = def.yOffset || 0;
     scene.add(group);
+    planets.push(group);
     return group;
   }
 
-  const accents = [
-    // About
-    makeAccent(new THREE.IcosahedronGeometry(3.4, 0), { x: -15, y: -16, z: -4, color: 0x22d3ee }),
-    // Expertise
-    makeAccent(new THREE.TorusGeometry(3.1, 0.9, 10, 44), { x: 14, y: -30, z: -6, color: 0x3b82f6 }),
-    // Clients
-    makeAccent(new THREE.OctahedronGeometry(2.8, 0), { x: -13, y: -46, z: -3, color: 0xe8c15a, scale: 0.9 }),
-    // Why join
-    makeAccent(new THREE.IcosahedronGeometry(2.6, 1), { x: 13, y: -60, z: -7, color: 0x22d3ee }),
-    // Roles / contact
-    makeAccent(new THREE.TorusKnotGeometry(2.2, 0.55, 72, 10), { x: -14, y: -76, z: -8, color: 0x3b82f6 }),
-  ];
+  // One planet per section, alternating sides. Colors stay in the
+  // site palette: blues, cyans and one gold world.
+  // Distant and small on purpose: it sits behind the About copy,
+  // so it should read as a far-away world, not compete with text.
+  makePlanet({
+    section: '#about',
+    side: -1, x: 19, z: -13,
+    radius: 2.7, displace: 0.14, seed: 7,
+    color: 0x1e6274, emissive: 0x0a2e3c,
+    atmosphere: 0x67e8f9, atmosphereStrength: 0.55,
+    spin: 0.25, tilt: 0.18,
+    moons: [{ radius: 0.3, dist: 1.9, speed: 0.5, color: 0x9fb2cc, tilt: 0.35 }],
+  });
+  makePlanet({
+    section: '#expertise',
+    side: 1, x: 14.5, z: -7,
+    radius: 3.8, displace: 0.04, seed: 12,
+    color: 0x2a4d8f, emissive: 0x121f45,
+    atmosphere: 0x7cb7ff, atmosphereStrength: 0.6,
+    oblate: 0.93, spin: 0.45, tilt: -0.22,
+    rings: [
+      { inner: 1.45, outer: 2.15, color: 0xe8c15a, opacity: 0.32, tiltX: -1.15 },
+      { inner: 2.2, outer: 2.38, color: 0x22d3ee, opacity: 0.22, tiltX: -1.15 },
+    ],
+  });
+  makePlanet({
+    section: '#careers',
+    side: -1, x: 14, z: -5,
+    radius: 3.0, displace: 0.16, seed: 23,
+    color: 0x8a6a2f, emissive: 0x3d2c10,
+    atmosphere: 0xe8c15a, atmosphereStrength: 0.55,
+    spin: 0.3, tilt: 0.3,
+    moons: [
+      { radius: 0.26, dist: 1.9, speed: 0.7, color: 0xc9b07a, tilt: 0.2 },
+      { radius: 0.18, dist: 2.5, speed: 0.42, color: 0x8593ab, tilt: 0.55, phase: 2.6 },
+    ],
+  });
+  makePlanet({
+    section: '#roles',
+    side: 1, x: 14.5, z: -6,
+    radius: 3.2, displace: 0.11, seed: 41,
+    color: 0x5f8ca3, emissive: 0x1c3a4a,
+    atmosphere: 0xbfeaff, atmosphereStrength: 0.7,
+    spin: 0.2, tilt: -0.15,
+    rings: [{ inner: 1.5, outer: 1.72, color: 0x67e8f9, opacity: 0.25, tiltX: -1.35, tiltY: 0.3 }],
+  });
+  // Sits low on the right, in the open space below the contact aside.
+  makePlanet({
+    section: '#contact',
+    side: 1, x: 15, z: -6, yOffset: -6.5,
+    radius: 2.9, holo: true,
+    color: 0x22d3ee,
+    atmosphere: 0x22d3ee, atmosphereStrength: 0.5,
+    spin: 0.35, tilt: 0.2,
+  });
 
   /* ---------- Scroll + mouse state ---------- */
   const CAMERA_TRAVEL = 82; // world units of descent over the full page
@@ -262,6 +464,27 @@ function initScene() {
   }
   readScroll();
   window.addEventListener('scroll', readScroll, { passive: true });
+
+  // Anchor each planet's altitude to its section, so the camera
+  // "arrives" at the planet as the section scrolls into view.
+  function placePlanets() {
+    const winH = window.innerHeight;
+    const max = document.documentElement.scrollHeight - winH;
+    for (const p of planets) {
+      const el = document.querySelector(p.userData.section);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      const centerScroll = rect.top + window.scrollY + rect.height / 2 - winH / 2;
+      const progress = Math.min(1, Math.max(0, max > 0 ? centerScroll / max : 0));
+      p.position.y = -progress * CAMERA_TRAVEL + p.userData.yOffset;
+    }
+  }
+  placePlanets();
+  // Re-place once everything (fonts, layout) has settled.
+  window.addEventListener('load', () => {
+    placePlanets();
+    if (prefersReducedMotion) renderStatic();
+  });
 
   const mouse = { x: 0, y: 0 }; // normalized -1..1
   let hasMouse = false;
@@ -292,6 +515,7 @@ function initScene() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     readScroll();
+    placePlanets();
     if (prefersReducedMotion) renderStatic();
   });
 
@@ -300,7 +524,7 @@ function initScene() {
   let rafId = null;
   // Own accumulator instead of clock.elapsedTime: Clock.start() resets
   // elapsedTime to 0 on tab-resume, which would snap every time-based
-  // animation (shape bob/spin, idle drift) back to its t=0 phase.
+  // animation (planet spin, moon orbits, idle drift) back to t=0 phase.
   let elapsed = 0;
 
   function animate() {
@@ -310,10 +534,24 @@ function initScene() {
     const dt = dtSec * 60; // normalized to ~60fps steps
     const t = elapsed;
 
-    // Camera: descend with scroll, drift with mouse parallax.
-    // Exponential smoothing scaled by dt so speed is refresh-rate independent.
+    // Camera: descend with scroll, lean toward the planet being passed,
+    // drift with mouse parallax. Exponential smoothing scaled by dt so
+    // speed is refresh-rate independent.
     const targetY = -scrollProgress * CAMERA_TRAVEL;
-    const targetX = hasMouse ? mouse.x * 2.2 : Math.sin(t * 0.1) * 0.8; // idle drift
+
+    // Find the planet nearest to the camera's target altitude and lean
+    // gently toward its side of the screen — "flying to the planet".
+    let lean = 0;
+    let bestDist = Infinity;
+    for (const p of planets) {
+      const d = Math.abs(p.position.y - targetY);
+      if (d < bestDist) {
+        bestDist = d;
+        lean = bestDist < 18 ? p.position.x * 0.1 : 0;
+      }
+    }
+
+    const targetX = (hasMouse ? mouse.x * 2.2 : Math.sin(t * 0.1) * 0.8) + lean;
     camera.position.y += (targetY - camera.position.y) * (1 - Math.pow(0.94, dt));
     camera.position.x += (targetX - camera.position.x) * (1 - Math.pow(0.97, dt));
     camera.position.z = 30 - Math.min(scrollProgress * 4, 4);
@@ -326,13 +564,16 @@ function initScene() {
       lines.rotation.y = points.rotation.y;
     }
 
-    for (const g of accents) {
-      g.rotation.x += 0.0016 * g.userData.spin * dt * 10;
-      g.rotation.y += 0.0022 * g.userData.spin * dt * 10;
-      g.position.y = g.userData.baseY + Math.sin(t * 0.5 + g.userData.bobOffset) * 0.6;
+    // Planets: slow spin, orbiting moons, a barely-visible float.
+    for (const p of planets) {
+      p.userData.body.rotation.y += 0.0026 * p.userData.spin * dt * 10;
+      for (const m of p.userData.moons || []) {
+        m.pivot.rotation.y = t * m.speed + m.phase;
+      }
     }
 
-    dust.rotation.y = t * 0.008;
+    starsFar.rotation.y = t * 0.004;
+    starsNear.rotation.y = t * 0.008;
 
     renderer.render(scene, camera);
   }

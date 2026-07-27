@@ -35,9 +35,9 @@
   }
   </script>
   <script type="module">
-    // Small standalone 3D accent for the 404 page: a slowly tumbling
-    // wireframe icosahedron. Same performance/fallback rules as the
-    // main scene, scaled down.
+    // Small standalone 3D accent for the 404 page: a lone low-poly
+    // planet with a ring, drifting out of orbit. Same performance and
+    // fallback rules as the main scene, scaled down.
     import * as THREE from 'three';
 
     const canvas = document.getElementById('webgl');
@@ -64,20 +64,56 @@
       const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 60);
       camera.position.z = 10;
 
+      scene.add(new THREE.AmbientLight(0x2a3c61, 1.4));
+      const sun = new THREE.DirectionalLight(0xcfe0ff, 2.6);
+      sun.position.set(5, 4, 8);
+      scene.add(sun);
+
+      // Displaced low-poly planet.
       const group = new THREE.Group();
-      const geo = new THREE.IcosahedronGeometry(3, 0);
-      group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color: 0x22d3ee, wireframe: true, transparent: true, opacity: 0.4,
+      const R = 2.6;
+      const geo = new THREE.IcosahedronGeometry(R, 3);
+      const pos = geo.attributes.position;
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).normalize();
+        const n = Math.sin(v.x * 5.1) * Math.sin(v.y * 4.3 + 2.0) * Math.sin(v.z * 5.7 + 4.0);
+        const len = R * (1 + n * 0.09);
+        pos.setXYZ(i, v.x * len, v.y * len, v.z * len);
+      }
+      geo.computeVertexNormals();
+      group.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        color: 0x1e6274, emissive: 0x0a2e3c, emissiveIntensity: 0.35,
+        flatShading: true, roughness: 0.85, metalness: 0.12,
+      })));
+
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(R * 1.5, R * 2.1, 72),
+        new THREE.MeshBasicMaterial({
+          color: 0xe8c15a, side: THREE.DoubleSide, transparent: true,
+          opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false,
+        })
+      );
+      ring.rotation.x = -1.2;
+      group.add(ring);
+
+      group.position.set(4.5, 1.2, -2);
+      group.rotation.z = 0.2;
+      scene.add(group);
+
+      // A few stars behind everything.
+      const starGeo = new THREE.BufferGeometry();
+      const starArr = new Float32Array(160 * 3);
+      for (let i = 0; i < 160; i++) {
+        starArr[i * 3 + 0] = (Math.random() * 2 - 1) * 30;
+        starArr[i * 3 + 1] = (Math.random() * 2 - 1) * 18;
+        starArr[i * 3 + 2] = -8 - Math.random() * 20;
+      }
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starArr, 3));
+      scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({
+        color: 0xdbe6ff, size: 0.08, transparent: true, opacity: 0.8,
         blending: THREE.AdditiveBlending, depthWrite: false,
       })));
-      const core = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({
-        color: 0x3b82f6, transparent: true, opacity: 0.06,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      }));
-      core.scale.setScalar(0.96);
-      group.add(core);
-      group.position.set(4.5, 1.5, -2);
-      scene.add(group);
 
       window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
@@ -88,14 +124,14 @@
       });
 
       if (prefersReducedMotion) {
-        group.rotation.set(0.5, 0.8, 0);
+        group.rotation.y = 0.8;
         renderer.render(scene, camera);
       } else {
         let rafId = null;
         const animate = () => {
           rafId = requestAnimationFrame(animate);
-          group.rotation.x += 0.003;
-          group.rotation.y += 0.004;
+          group.children[0].rotation.y += 0.0035;
+          group.rotation.x = Math.sin(performance.now() * 0.0002) * 0.06;
           renderer.render(scene, camera);
         };
         animate();

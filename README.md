@@ -24,7 +24,9 @@ index.html      Main page (hero, about, expertise, clients, why join, roles, con
 404.html        Custom 404 page with a small 3D element
 privacy.html    Privacy policy (template text — review before launch)
 css/styles.css  Design system: dark theme, glassmorphism, responsive, reduced-motion
-js/scene.js     Three.js background: particle network, scroll camera, accent shapes
+js/scene.js     Three.js background: particle network hero, then a scroll-driven
+                camera journey past a procedural planet per section (starfield,
+                displaced low-poly planets, rings, moons, holographic planet)
 js/main.js      UI: navbar, mobile menu, reveals, counters, card tilt, form handling
 ```
 
