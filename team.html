@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Crew — Apex IT Consultant</title>
+  <meta name="description" content="Meet the people behind Apex IT Consultant — interactive 3D particle portraits." />
+  <meta name="theme-color" content="#050810" />
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%233b82f6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M32 6 58 54H44.8L32 29.4 19.2 54H6Z' fill='url(%23g)'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/team.css" />
+</head>
+<body class="team-page">
+  <canvas id="team-canvas" aria-hidden="true"></canvas>
+
+  <header class="navbar scrolled">
+    <div class="container nav-inner">
+      <a href="/" class="brand" aria-label="Apex IT Consultant — home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="bm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><path d="M32 6 58 54H44.8L32 29.4 19.2 54H6Z" fill="url(#bm)"/></svg>
+        <span class="brand-name">Apex&nbsp;IT</span>
+      </a>
+      <a href="/" class="btn btn-ghost btn-sm">&larr; Back to site</a>
+    </div>
+  </header>
+
+  <main class="team-main">
+    <!-- Info panel: populated from js/team-config.js -->
+    <aside class="glass-card team-panel" id="team-panel">
+      <p class="kicker">The Crew</p>
+      <h1 class="team-name" id="team-name">&nbsp;</h1>
+      <p class="team-role" id="team-role"></p>
+      <p class="team-focus" id="team-focus"></p>
+      <p class="team-bio" id="team-bio"></p>
+
+      <div class="team-views" id="team-views" role="group" aria-label="Portrait views"></div>
+      <div class="team-people" id="team-people" role="group" aria-label="Team members" hidden></div>
+
+      <p class="team-hint" id="team-hint">Drag to rotate · click the portrait to scatter the stardust</p>
+    </aside>
+
+    <!-- Loading / status overlay -->
+    <div class="team-status" id="team-status" role="status">
+      <span class="team-status-orb" aria-hidden="true"></span>
+      <span id="team-status-text">Preparing the scanner…</span>
+    </div>
+  </main>
+
+  <footer class="team-footer">
+    <p>&copy; <span id="year">2026</span> Apex IT Consultant</p>
+  </footer>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="js/team-scene.js"></script>
+</body>
+</html>

@@ -32,7 +32,27 @@ js/scene.js     Three.js background: particle network hero, then a scroll-driven
                 destination planet: atmosphere flash, then a low-poly landscape
                 with crystals, a beacon and a ringed planet on the horizon.
 js/main.js      UI: navbar, mobile menu, reveals, counters, card tilt, form handling
+team.html       Standalone 3D particle-portrait page for team members
+css/team.css    Styles for the team page only (main site stays lean)
+js/team-config.js  People registry: name, role, focus, bio, photo paths
+js/team-scene.js   Portrait engine: in-browser background removal
+                   (MediaPipe person segmentation, ~250 KB model; falls back
+                   to corner-color keying, then an oval mask), photo pixels →
+                   3D particle cloud, stardust morph between views
+profile_pic/    Team photos (any portrait works — background is removed
+                automatically)
 ```
+
+## Team pages
+
+`team.html` renders any configured person as an interactive 3D particle
+portrait (`team.html?p=<key>`). Adding someone takes two steps, no code:
+
+1. Drop their photo(s) in `profile_pic/`.
+2. Add an entry in `js/team-config.js` (key, name, role, focus, bio, views).
+
+Multiple photos per person become view buttons the portrait morphs between.
+The page is fully standalone — nothing from it loads on the main site.
 
 ## Notes
 
