@@ -202,6 +202,79 @@
     });
   }
 
+  /* ---------- NOVA — ElevenLabs voice agent ----------
+     The widget stays hidden (and its third-party script unloaded)
+     until the user reaches the landing section at the end of the
+     journey; then the bubble rises in bottom-right. */
+  var agentWrap = document.getElementById('agent-widget');
+  var landingSection = document.getElementById('landing');
+  var agentScriptLoaded = false;
+
+  function loadAgentScript() {
+    if (agentScriptLoaded) return;
+    agentScriptLoaded = true;
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/@elevenlabs/convai-widget-embed';
+    s.async = true;
+    s.type = 'text/javascript';
+    document.body.appendChild(s);
+  }
+
+  function showAgent() {
+    if (!agentWrap) return;
+    loadAgentScript();
+    agentWrap.classList.add('visible');
+  }
+
+  if (agentWrap && landingSection && 'IntersectionObserver' in window) {
+    var agentObserver = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            showAgent();
+            agentObserver.disconnect();
+          }
+        });
+      },
+      // The landing section is 200vh tall, so a fully covered viewport
+      // yields a ratio of ~0.5 — 0.35 fires once the user is well inside.
+      { threshold: 0.35 }
+    );
+    agentObserver.observe(landingSection);
+  } else {
+    showAgent();
+  }
+
+  var novaBtn = document.getElementById('talk-nova');
+  if (novaBtn) {
+    novaBtn.addEventListener('click', function () {
+      showAgent();
+      // Best effort: open the conversation directly by clicking the
+      // widget's own button inside its shadow root. If the widget
+      // hasn't upgraded yet (script still loading) or the shadow root
+      // is closed, fall back to pulsing the bubble so the user spots it.
+      var opened = false;
+      var el = agentWrap && agentWrap.querySelector('elevenlabs-convai');
+      if (el && el.shadowRoot) {
+        try {
+          var widgetBtn = el.shadowRoot.querySelector('button');
+          if (widgetBtn) {
+            widgetBtn.click();
+            opened = true;
+          }
+        } catch (err) {
+          /* closed shadow root — fall through to the pulse */
+        }
+      }
+      if (!opened && agentWrap) {
+        agentWrap.classList.add('attention');
+        window.setTimeout(function () {
+          agentWrap.classList.remove('attention');
+        }, 2600);
+      }
+    });
+  }
+
   /* ---------- Footer year ---------- */
   var yearEl = document.getElementById('year');
   if (yearEl) yearEl.textContent = String(new Date().getFullYear());

@@ -190,7 +190,7 @@
           <span class="logo logo-shell">Shell</span>
           <span class="logo logo-alliander">Alliander</span>
           <span class="logo logo-nike">NIKE</span>
-          <span class="logo logo-essex">ESSEX</span>
+          <span class="logo logo-Asics">Asics</span>
           <span class="logo logo-asml">ASML</span>
           <span class="logo logo-heineken">Heineken</span>
           <span class="logo logo-de">Douwe&nbsp;Egberts</span>
@@ -200,7 +200,7 @@
           <span class="logo logo-shell">Shell</span>
           <span class="logo logo-alliander">Alliander</span>
           <span class="logo logo-nike">NIKE</span>
-          <span class="logo logo-essex">ESSEX</span>
+          <span class="logo logo-Asics">Asics</span>
           <span class="logo logo-asml">ASML</span>
           <span class="logo logo-heineken">Heineken</span>
           <span class="logo logo-de">Douwe&nbsp;Egberts</span>
@@ -399,7 +399,15 @@
           <p class="kicker">Touchdown</p>
           <h2 class="landing-title">Welcome to <span class="grad-text">Planet Apex</span></h2>
           <p class="landing-sub">Every journey here ends the same way: doing the best SAP work of your career, alongside people who care about the craft as much as you do.</p>
-          <a href="#contact" class="btn btn-primary">Begin Your Journey</a>
+          <div class="landing-ctas">
+            <a href="#contact" class="btn btn-primary">Begin Your Journey</a>
+            <button type="button" class="btn btn-agent" id="talk-nova">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/></svg>
+              Talk to NOVA
+              <span class="agent-dot" aria-hidden="true"></span>
+            </button>
+          </div>
+          <p class="landing-agent-note">NOVA is our AI crew member — ask it anything about roles, projects or life at Apex, out loud.</p>
         </div>
       </div>
     </section>
@@ -407,6 +415,17 @@
 
   <!-- Atmosphere-entry flash for the landing sequence -->
   <div id="landing-flash" aria-hidden="true"></div>
+
+  <!-- NOVA — ElevenLabs conversational agent, revealed at the journey's
+       end. The embed script is lazy-loaded by main.js the first time the
+       landing section comes into view. -->
+  <div class="agent-widget" id="agent-widget">
+    <elevenlabs-convai
+      agent-id="agent_6101kje60zz3fv7t5xgqyr9zk6bf"
+      action-text="Talk to NOVA"
+      avatar-orb-color-1="#3b82f6"
+      avatar-orb-color-2="#22d3ee"></elevenlabs-convai>
+  </div>
 
   <!-- ============ FOOTER ============ -->
   <footer class="footer">

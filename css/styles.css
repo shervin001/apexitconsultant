@@ -481,7 +481,7 @@ html.js .reveal.visible {
 .logo-shell:hover { color: #fbce07; }
 .logo-alliander:hover { color: #78be20; }
 .logo-nike:hover { color: #f5f5f5; }
-.logo-essex:hover { color: #9aa7ff; }
+.logo-Asics:hover { color: #9aa7ff; }
 .logo-asml:hover { color: #0f9bd7; }
 .logo-heineken:hover { color: #007a33; }
 .logo-de:hover { color: #d5a021; }
@@ -752,6 +752,81 @@ html.js .landing-copy.landed {
   background: radial-gradient(circle at 50% 58%,
     #eafcff 0%, #b5eeff 30%, rgba(34, 211, 238, 0.75) 58%,
     rgba(59, 130, 246, 0.35) 78%, rgba(5, 8, 16, 0) 100%);
+}
+
+/* ---------- NOVA voice agent ---------- */
+.landing-ctas {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn-agent {
+  position: relative;
+  color: var(--ink);
+  border-color: rgba(34, 211, 238, 0.45);
+  background: rgba(34, 211, 238, 0.08);
+}
+.btn-agent:hover {
+  border-color: var(--cyan);
+  background: rgba(34, 211, 238, 0.16);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(34, 211, 238, 0.25);
+}
+.btn-agent svg { width: 18px; height: 18px; color: var(--cyan); }
+
+.agent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.9);
+  animation: agent-dot 1.8s ease-in-out infinite;
+}
+@keyframes agent-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(0.7); opacity: 0.6; }
+}
+
+.landing-agent-note {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-top: 1.3rem;
+}
+
+/* Floating widget: hidden until the journey's end, then it rises in
+   with a soft pulsing halo behind the ElevenLabs bubble. */
+.agent-widget {
+  position: fixed;
+  right: 1.4rem;
+  bottom: 1.4rem;
+  z-index: 110;
+  opacity: 0;
+  transform: translateY(18px);
+  pointer-events: none;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.agent-widget.visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.agent-widget::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 999px;
+  background: radial-gradient(closest-side, rgba(34, 211, 238, 0.35), rgba(34, 211, 238, 0));
+  animation: agent-halo 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+.agent-widget.attention::before {
+  animation: agent-halo 0.65s ease-in-out infinite;
+}
+@keyframes agent-halo {
+  0%, 100% { opacity: 0.45; transform: scale(0.96); }
+  50%      { opacity: 1; transform: scale(1.06); }
 }
 
 /* ---------- Footer ---------- */
