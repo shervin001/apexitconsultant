@@ -425,10 +425,323 @@ async function main() {
     color: 0x8fb8e8,
     size: 0.16,
     transparent: true,
-    opacity: 0.7,
+    opacity: 0.85,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   })));
+
+  /* ----- Ambient backdrop: planets, nebulas, rocks, streaks -----
+     Everything lives deep behind the portrait in bgGroup, which
+     counter-rotates slightly with the drag for parallax. The
+     portrait's custom shader ignores fog, so the fog only softens
+     these backdrop objects. */
+  scene.fog = new THREE.FogExp2(0x050810, 0.005);
+
+  const sun = new THREE.DirectionalLight(0xcfe0ff, 2.2);
+  sun.position.set(7, 6, 10);
+  scene.add(sun);
+  scene.add(new THREE.AmbientLight(0x2a3c61, 1.3));
+
+  const bgGroup = new THREE.Group();
+  scene.add(bgGroup);
+
+  // Narrow screens see a much smaller slice of the backdrop plane —
+  // pull objects toward the center so they stay in frame.
+  const BGX = isMobile ? 0.42 : 1;
+
+  const glowTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(0.4, 'rgba(160,220,255,0.25)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  })();
+
+  for (const n of [
+    { x: -50, y: 24, z: -80, s: 85, color: 0x2451b8, o: 0.16 },
+    { x: 48, y: -22, z: -85, s: 70, color: 0x14727e, o: 0.14 },
+  ]) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex,
+      color: n.color,
+      transparent: true,
+      opacity: n.o,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    }));
+    sp.position.set(n.x * BGX, n.y, n.z);
+    sp.scale.set(n.s, n.s * 0.7, 1);
+    bgGroup.add(sp);
+  }
+
+  // Fresnel atmosphere shell (bright at the limb, clear face-on).
+  function makeAtmosphere(radius, color, strength) {
+    return new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 28, 20),
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uColor: { value: new THREE.Color(color) },
+          uStrength: { value: strength },
+        },
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vView;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            vView = normalize(-mv.xyz);
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform float uStrength;
+          varying vec3 vNormal;
+          varying vec3 vView;
+          void main() {
+            float f = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.6);
+            gl_FragColor = vec4(uColor, f * uStrength);
+          }`,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+  }
+
+  const spinners = []; // { body, spin, moons: [{pivot, speed, phase}] }
+
+  function addBgPlanet(def) {
+    const g = new THREE.Group();
+    const geo = new THREE.IcosahedronGeometry(def.r, 3);
+    if (def.displace) {
+      const pos = geo.attributes.position;
+      const v = new THREE.Vector3();
+      const s = def.seed || 1;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).normalize();
+        const n = Math.sin(v.x * 5.1 + s) * Math.sin(v.y * 4.3 + s * 2.0) * Math.sin(v.z * 5.7 + s * 3.0);
+        const len = def.r * (1 + n * def.displace);
+        pos.setXYZ(i, v.x * len, v.y * len, v.z * len);
+      }
+      geo.computeVertexNormals();
+    }
+    const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: def.color,
+      emissive: def.emissive || 0x000000,
+      emissiveIntensity: 0.35,
+      flatShading: true,
+      roughness: 0.85,
+      metalness: 0.12,
+    }));
+    if (def.oblate) body.scale.y = def.oblate;
+    g.add(body);
+
+    if (def.atmosphere) g.add(makeAtmosphere(def.r * 1.16, def.atmosphere, 0.6));
+
+    for (const rd of def.rings || []) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(def.r * rd.inner, def.r * rd.outer, 64),
+        new THREE.MeshBasicMaterial({
+          color: rd.color,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: rd.opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+      );
+      ring.rotation.x = rd.tiltX;
+      g.add(ring);
+    }
+
+    const moons = (def.moons || []).map((m) => {
+      const pivot = new THREE.Group();
+      pivot.rotation.x = m.tilt || 0.3;
+      const moon = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(m.r, 1),
+        new THREE.MeshStandardMaterial({
+          color: 0x9fb2cc,
+          flatShading: true,
+          roughness: 0.9,
+          metalness: 0.05,
+        })
+      );
+      moon.position.x = def.r * m.dist;
+      pivot.add(moon);
+      g.add(pivot);
+      return { pivot, speed: m.speed, phase: m.phase || 0 };
+    });
+
+    g.position.set(def.x * BGX, def.y, def.z);
+    g.rotation.z = def.tilt || 0;
+    bgGroup.add(g);
+    spinners.push({ body, spin: def.spin, moons });
+    return g;
+  }
+
+  // Ringed gas giant, upper left — behind/above the info panel.
+  addBgPlanet({
+    r: 6, x: -36, y: 17, z: -62,
+    color: 0x2a4d8f, emissive: 0x121f45,
+    displace: 0.03, seed: 5, oblate: 0.93, tilt: -0.2, spin: 0.05,
+    atmosphere: 0x7cb7ff,
+    rings: [
+      { inner: 1.45, outer: 2.1, color: 0xe8c15a, opacity: 0.3, tiltX: -1.15 },
+      { inner: 2.15, outer: 2.3, color: 0x22d3ee, opacity: 0.2, tiltX: -1.15 },
+    ],
+  });
+  // Small teal world with a moon, lower right.
+  addBgPlanet({
+    r: 3.2, x: 38, y: -15, z: -55,
+    color: 0x1e6274, emissive: 0x0a2e3c,
+    displace: 0.1, seed: 12, tilt: 0.2, spin: 0.09,
+    atmosphere: 0x67e8f9,
+    moons: [{ r: 0.4, dist: 2.2, speed: 0.4, tilt: 0.35 }],
+  });
+
+  // Holographic wireframe globe, upper right — the brand's "digital planet".
+  const holo = new THREE.Group();
+  holo.add(new THREE.Mesh(
+    new THREE.IcosahedronGeometry(2.2, 1),
+    new THREE.MeshBasicMaterial({
+      color: 0x22d3ee,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.4,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  ));
+  holo.add(makeAtmosphere(2.55, 0x22d3ee, 0.4));
+  holo.position.set(30 * BGX, 19, -48);
+  bgGroup.add(holo);
+  spinners.push({ body: holo, spin: 0.14, moons: [] });
+
+  // Slowly drifting, tumbling rocks that wrap around the frame.
+  const rocks = [];
+  const rockCount = isMobile ? 2 : 4;
+  for (let i = 0; i < rockCount; i++) {
+    const r = 0.4 + Math.random() * 0.5;
+    const rockGeo = new THREE.IcosahedronGeometry(r, 1);
+    const pos = rockGeo.attributes.position;
+    const v = new THREE.Vector3();
+    for (let j = 0; j < pos.count; j++) {
+      v.fromBufferAttribute(pos, j).normalize();
+      const n = Math.sin(v.x * 7.3 + i) * Math.sin(v.y * 6.1 + i * 2.0) * Math.sin(v.z * 8.7 + i * 3.0);
+      const len = r * (1 + n * 0.35);
+      pos.setXYZ(j, v.x * len, v.y * len, v.z * len);
+    }
+    rockGeo.computeVertexNormals();
+    const rock = new THREE.Mesh(rockGeo, new THREE.MeshStandardMaterial({
+      color: 0x5a6a80,
+      flatShading: true,
+      roughness: 1,
+      metalness: 0.05,
+    }));
+    rock.position.set(
+      (Math.random() * 2 - 1) * 44 * BGX,
+      (Math.random() * 2 - 1) * 24,
+      -30 - Math.random() * 25
+    );
+    bgGroup.add(rock);
+    rocks.push({
+      mesh: rock,
+      vel: (0.25 + Math.random() * 0.4) * (Math.random() < 0.5 ? 1 : -1),
+      tumbleX: (Math.random() - 0.5) * 0.4,
+      tumbleY: (Math.random() - 0.5) * 0.4,
+    });
+  }
+  const ROCK_WRAP = 50 * BGX;
+
+  // Occasional shooting stars with fading trails.
+  const streaks = [];
+  const streakCount = isMobile ? 1 : 2;
+  const X_AXIS = new THREE.Vector3(1, 0, 0);
+  for (let i = 0; i < streakCount; i++) {
+    const SEGS = 12;
+    const pts = new Float32Array(SEGS * 3);
+    const cols = new Float32Array(SEGS * 3);
+    const len = 6 + Math.random() * 3;
+    for (let j = 0; j < SEGS; j++) {
+      const f = j / (SEGS - 1);
+      pts[j * 3] = -f * len;
+      const b = Math.pow(1 - f, 2);
+      cols[j * 3] = 0.95 * b; cols[j * 3 + 1] = 0.98 * b; cols[j * 3 + 2] = b;
+    }
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+    lineGeo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    }));
+    line.visible = false;
+    bgGroup.add(line);
+    streaks.push({ line, alive: false, vel: new THREE.Vector3(), traveled: 0, range: 0 });
+  }
+  let nextStreakAt = 3;
+
+  function updateBackdrop(dt) {
+    for (const s of spinners) {
+      s.body.rotation.y += s.spin * dt;
+      for (const m of s.moons) {
+        m.pivot.rotation.y = uniforms.uTime.value * m.speed + m.phase;
+      }
+    }
+    for (const r of rocks) {
+      r.mesh.position.x += r.vel * dt;
+      r.mesh.rotation.x += r.tumbleX * dt;
+      r.mesh.rotation.y += r.tumbleY * dt;
+      if (r.mesh.position.x > ROCK_WRAP) r.mesh.position.x = -ROCK_WRAP;
+      if (r.mesh.position.x < -ROCK_WRAP) r.mesh.position.x = ROCK_WRAP;
+    }
+
+    const t = uniforms.uTime.value;
+    if (t >= nextStreakAt) {
+      const free = streaks.find((s) => !s.alive);
+      if (free) {
+        const dir = new THREE.Vector3(
+          (Math.random() < 0.5 ? 1 : -1) * (0.7 + Math.random() * 0.5),
+          -(0.45 + Math.random() * 0.6),
+          0
+        ).normalize();
+        free.vel.copy(dir).multiplyScalar(24 + Math.random() * 14);
+        free.line.position.set(
+          (Math.random() * 2 - 1) * 36 * BGX,
+          14 + Math.random() * 14,
+          -34 - Math.random() * 20
+        );
+        free.line.quaternion.setFromUnitVectors(X_AXIS, dir);
+        free.traveled = 0;
+        free.range = 28 + Math.random() * 12;
+        free.alive = true;
+        free.line.visible = true;
+      }
+      nextStreakAt = t + 4 + Math.random() * 6;
+    }
+    for (const s of streaks) {
+      if (!s.alive) continue;
+      const step = s.vel.length() * dt;
+      s.traveled += step;
+      s.line.position.addScaledVector(s.vel, dt);
+      const f = s.traveled / s.range;
+      s.line.material.opacity = f < 0.12 ? f / 0.12 : Math.max(0, 1 - (f - 0.12) / 0.88);
+      if (f >= 1) {
+        s.alive = false;
+        s.line.visible = false;
+      }
+    }
+  }
 
   /* ----- Portrait particle system ----- */
   const posA = new Float32Array(COUNT * 3);
@@ -677,6 +990,7 @@ async function main() {
 
     if (!prefersReducedMotion) {
       uniforms.uTime.value += dt;
+      updateBackdrop(dt);
 
       const now = performance.now();
       if (
@@ -704,6 +1018,9 @@ async function main() {
 
     group.rotation.y += (rotTarget.y - group.rotation.y) * 0.06;
     group.rotation.x += (rotTarget.x - group.rotation.x) * 0.06;
+    // Backdrop counter-moves at a fraction of the drag for parallax depth.
+    bgGroup.rotation.y = group.rotation.y * 0.25;
+    bgGroup.rotation.x = group.rotation.x * 0.25;
     // Keep render-on-demand alive until the eased rotation settles.
     if (
       Math.abs(rotTarget.y - group.rotation.y) > 0.001 ||
