@@ -758,6 +758,110 @@ function initScene() {
     }
   }
 
+  /* ---------- Stardust cursor trail ----------
+     Soft glowing particles emitted along the cursor's path (emission
+     scales with movement, so a resting cursor stays clean). Lives in
+     whichever scene is active, projected 24 units in front of the
+     camera so it works in space and on the landscape alike. */
+  const CT_N = isMobile ? 90 : 200;
+  const ctPos = new Float32Array(CT_N * 3);
+  const ctVel = new Float32Array(CT_N * 3);
+  const ctBase = new Float32Array(CT_N * 3);
+  const ctCol = new Float32Array(CT_N * 3);
+  const ctLife = new Float32Array(CT_N);
+  const ctMaxLife = new Float32Array(CT_N);
+  let ctHead = 0;
+  let trailBudget = 0; // pixels of cursor movement not yet "spent" on particles
+
+  const ctGeo = new THREE.BufferGeometry();
+  ctGeo.setAttribute('position', new THREE.BufferAttribute(ctPos, 3).setUsage(THREE.DynamicDrawUsage));
+  ctGeo.setAttribute('color', new THREE.BufferAttribute(ctCol, 3).setUsage(THREE.DynamicDrawUsage));
+  const cursorTrail = new THREE.Points(ctGeo, new THREE.PointsMaterial({
+    size: 0.5,
+    map: glowTex,
+    vertexColors: true,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }));
+  cursorTrail.frustumCulled = false;
+  scene.add(cursorTrail);
+  let trailInSpace = true;
+
+  const trailPoint = new THREE.Vector3();
+  const prevTrailPoint = new THREE.Vector3();
+  let hasPrevTrailPoint = false;
+
+  function emitTrailParticle(x, y, z) {
+    const i = ctHead;
+    ctHead = (ctHead + 1) % CT_N;
+    const i3 = i * 3;
+    ctPos[i3] = x + (Math.random() - 0.5) * 0.5;
+    ctPos[i3 + 1] = y + (Math.random() - 0.5) * 0.5;
+    ctPos[i3 + 2] = z + (Math.random() - 0.5) * 0.3;
+    ctVel[i3] = (Math.random() - 0.5) * 1.1;
+    ctVel[i3 + 1] = (Math.random() - 0.5) * 1.1 - 0.35; // slight downward drift
+    ctVel[i3 + 2] = (Math.random() - 0.5) * 0.5;
+    const glint = 0.6 + Math.random() * 0.4;
+    if (Math.random() < 0.12) {
+      // occasional gold sparkle
+      ctBase[i3] = 1.0 * glint; ctBase[i3 + 1] = 0.78 * glint; ctBase[i3 + 2] = 0.4 * glint;
+    } else {
+      ctBase[i3] = 0.5 * glint; ctBase[i3 + 1] = 0.88 * glint; ctBase[i3 + 2] = 1.0 * glint;
+    }
+    ctLife[i] = ctMaxLife[i] = 0.5 + Math.random() * 0.7;
+  }
+
+  function updateCursorTrail(dtSec, spaceActive) {
+    // Keep the trail in the scene currently being rendered.
+    if (spaceActive !== trailInSpace) {
+      (spaceActive ? scene : landscape.scene).add(cursorTrail);
+      trailInSpace = spaceActive;
+      hasPrevTrailPoint = false; // no streak across the scene switch
+    }
+
+    if (hasMouse) {
+      ndc.set(mouse.x, mouse.y);
+      raycaster.setFromCamera(ndc, camera);
+      trailPoint.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, 24);
+      if (!hasPrevTrailPoint) {
+        prevTrailPoint.copy(trailPoint);
+        hasPrevTrailPoint = true;
+      }
+      const PX_PER_PARTICLE = 7;
+      const count = Math.min(8, Math.floor(trailBudget / PX_PER_PARTICLE));
+      if (count > 0) {
+        trailBudget -= count * PX_PER_PARTICLE;
+        for (let k = 1; k <= count; k++) {
+          tmpV.lerpVectors(prevTrailPoint, trailPoint, k / count);
+          emitTrailParticle(tmpV.x, tmpV.y, tmpV.z);
+        }
+      }
+      prevTrailPoint.copy(trailPoint);
+      trailBudget *= 0.9; // unspent budget decays; stops don't burst later
+    }
+
+    // Age, drift and fade every live particle.
+    for (let i = 0; i < CT_N; i++) {
+      const i3 = i * 3;
+      if (ctLife[i] > 0) {
+        ctLife[i] -= dtSec;
+        ctPos[i3] += ctVel[i3] * dtSec;
+        ctPos[i3 + 1] += ctVel[i3 + 1] * dtSec;
+        ctPos[i3 + 2] += ctVel[i3 + 2] * dtSec;
+        const f = Math.max(0, ctLife[i] / ctMaxLife[i]);
+        const b = f * f;
+        ctCol[i3] = ctBase[i3] * b;
+        ctCol[i3 + 1] = ctBase[i3 + 1] * b;
+        ctCol[i3 + 2] = ctBase[i3 + 2] * b;
+      } else {
+        ctCol[i3] = ctCol[i3 + 1] = ctCol[i3 + 2] = 0;
+      }
+    }
+    ctGeo.attributes.position.needsUpdate = true;
+    ctGeo.attributes.color.needsUpdate = true;
+  }
+
   // Spawn scheduling (elapsed-time based, so pauses don't burst-spawn).
   let nextRocketAt = 2.5;
   let nextShootAt = 1.5;
@@ -996,11 +1100,20 @@ function initScene() {
 
   const mouse = { x: 0, y: 0 }; // normalized -1..1
   let hasMouse = false;
+  let lastClientX = null;
+  let lastClientY = null;
   window.addEventListener('pointermove', (e) => {
     if (e.pointerType && e.pointerType !== 'mouse') return;
     hasMouse = true;
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -((e.clientY / window.innerHeight) * 2 - 1);
+    // Feed the cursor-trail emitter with pixels travelled (capped so a
+    // fast swipe can't bank a long burst of particles).
+    if (lastClientX !== null) {
+      trailBudget = Math.min(56, trailBudget + Math.hypot(e.clientX - lastClientX, e.clientY - lastClientY));
+    }
+    lastClientX = e.clientX;
+    lastClientY = e.clientY;
   }, { passive: true });
 
   // Project the cursor onto the z=0 plane for particle attraction.
@@ -1108,6 +1221,7 @@ function initScene() {
       starsNear.rotation.y = t * 0.008;
 
       updateAmbient(dtSec, dt, t, camera.position.y, L < 0.4);
+      updateCursorTrail(dtSec, true);
 
       renderer.render(scene, camera);
     } else {
@@ -1124,6 +1238,8 @@ function initScene() {
 
       landscape.beaconLight.intensity = 12 + Math.sin(t * 2.6) * 5;
       landscape.bulbGlow.material.opacity = 0.7 + Math.sin(t * 2.6) * 0.25;
+
+      updateCursorTrail(dtSec, false);
 
       renderer.render(landscape.scene, camera);
     }

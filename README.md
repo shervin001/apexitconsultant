@@ -7,7 +7,7 @@ Static site — no build step. Three.js (WebGL) is loaded from CDN via an import
 
 ```bash
 npm install
-npm run start
+npm run watch
 ```
 
 This serves the site at [http://localhost:3000](http://localhost:3000) and opens it in your browser
