@@ -33,12 +33,15 @@ js/scene.js     Three.js background: particle network hero, then a scroll-driven
                 with crystals, a beacon and a ringed planet on the horizon.
 js/main.js      UI: navbar, mobile menu, reveals, counters, card tilt, form handling
 team.html       Standalone 3D particle-portrait page for team members
-css/team.css    Styles for the team page only (main site stays lean)
+themes_v2.html  The style lab: same photos in four switchable 3D styles
+                (voxels, halftone, scanlines, hologram) — ?p=<person>&m=<mode>
+css/team.css    Styles for the team pages only (main site stays lean)
 js/team-config.js  People registry: name, role, focus, bio, photo paths
-js/team-scene.js   Portrait engine: in-browser background removal
-                   (MediaPipe person segmentation, ~250 KB model; falls back
-                   to corner-color keying, then an oval mask), photo pixels →
-                   3D particle cloud, stardust morph between views
+js/portrait-pipeline.js  Shared photo → masked-person pipeline: in-browser
+                   background removal (MediaPipe person segmentation, ~250 KB
+                   model; falls back to corner-color keying, then an oval mask)
+js/team-scene.js   v1 engine: masked pixels → particle cloud, stardust morph
+js/team-scene-v2.js  v2 engine: the four style-lab renderers
 profile_pic/    Team photos (any portrait works — background is removed
                 automatically)
 ```

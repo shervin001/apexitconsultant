@@ -131,6 +131,24 @@
   opacity: 0.8;
 }
 
+.team-row-label {
+  font-family: var(--font-head);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.45rem;
+}
+.team-row-label[hidden],
+.team-views[hidden] { display: none; }
+
+.team-alt-link {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.team-alt-link:hover { text-decoration: underline; }
+
 /* ---------- Status / loader ---------- */
 .team-status {
   position: fixed;

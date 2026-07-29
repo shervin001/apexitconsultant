@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Crew — Apex IT Consultant</title>
-  <meta name="description" content="Meet the people behind Apex IT Consultant — interactive 3D particle portraits." />
+  <title>The Crew · Lab — Apex IT Consultant</title>
+  <meta name="description" content="The style lab: the Apex IT crew rendered in switchable 3D styles — voxels, halftone, scanlines and hologram." />
   <meta name="theme-color" content="#050810" />
   <script>document.documentElement.classList.add('js');</script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%233b82f6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M32 6 58 54H44.8L32 29.4 19.2 54H6Z' fill='url(%23g)'/%3E%3C/svg%3E" />
@@ -30,17 +30,22 @@
   <main class="team-main">
     <!-- Info panel: populated from js/team-config.js -->
     <aside class="glass-card team-panel" id="team-panel">
-      <p class="kicker">The Crew</p>
+      <p class="kicker">The Crew · Lab</p>
       <h1 class="team-name" id="team-name">&nbsp;</h1>
       <p class="team-role" id="team-role"></p>
       <p class="team-focus" id="team-focus"></p>
       <p class="team-bio" id="team-bio"></p>
 
+      <p class="team-row-label" id="team-modes-label">Style</p>
+      <div class="team-views" id="team-modes" role="group" aria-label="Portrait styles"></div>
+
+      <p class="team-row-label" id="team-views-label">Photo</p>
       <div class="team-views" id="team-views" role="group" aria-label="Portrait views"></div>
+
       <div class="team-people" id="team-people" role="group" aria-label="Team members" hidden></div>
 
-      <p class="team-hint" id="team-hint">Drag to rotate · click the portrait to scatter the stardust</p>
-      <p class="team-hint"><a class="team-alt-link" id="v2-link" href="themes_v2.html">&#10022; Try more styles in the lab</a></p>
+      <p class="team-hint" id="team-hint">Drag to rotate · click the portrait for a reaction</p>
+      <p class="team-hint"><a class="team-alt-link" id="v1-link" href="team.html">&larr; Particle version</a></p>
     </aside>
 
     <!-- Loading / status overlay -->
@@ -61,6 +66,6 @@
     }
   }
   </script>
-  <script type="module" src="js/team-scene.js"></script>
+  <script type="module" src="js/team-scene-v2.js"></script>
 </body>
 </html>
